@@ -4,7 +4,7 @@
 
 namespace Engine {
 
-Application::Application() : window(800, 600), renderer(window.getWindow()) {}
+Application::Application() : window(800, 600), renderer(window) {}
 
 Application Application::createApplication() { return {Application()}; }
 

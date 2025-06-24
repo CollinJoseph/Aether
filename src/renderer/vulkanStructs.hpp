@@ -20,4 +20,5 @@ struct SwapChainInfo {
   VkFormat format;
   VkExtent2D extent;
 };
+
 } // namespace Renderer

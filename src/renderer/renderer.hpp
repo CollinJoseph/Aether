@@ -1,14 +1,16 @@
 #pragma once
+#include "engine/window.hpp"
 #include "vulkanContext.hpp"
 
 namespace Renderer {
 class Renderer {
 public:
-  Renderer(GLFWwindow *window);
+  explicit Renderer(Engine::Window &window);
   ~Renderer();
   void drawFrame();
 
 private:
+  Engine::Window &m_window;
   VulkanContext m_context;
   VkRenderPass m_renderPass;
   VkPipelineLayout m_pipelineLayout;
@@ -21,6 +23,8 @@ private:
   void createRenderPass();
   void createGraphicsPipeline();
   void createFramebuffers();
+  void destroyFramebuffers();
   void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+  void recreateSwapChain();
 };
 } // namespace Renderer

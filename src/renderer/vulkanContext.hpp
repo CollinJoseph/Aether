@@ -12,12 +12,14 @@ public:
   const std::vector<VkImageView> &getImageViews() const;
   const std::vector<VkCommandBuffer> &getCommandBuffers() const;
   void beginFrame();
+  void resetCurrentInFlightFence();
   void endFrame(uint32_t imageIndex);
-  void waitIdle() const;
+  void waitForDeviceIdle() const;
   // TODO: Move to another class
-  uint32_t acquireNextSwapChainImage();
+  int64_t acquireNextSwapChainImage();
   void presentFrame(uint32_t imageIndex);
   void nextFrame();
+  void recreateSwapChain();
   uint32_t getCurrentFrame() const;
 
 private:
@@ -61,5 +63,7 @@ private:
   void createCommandPool();
   void createCommandBuffers();
   void createSyncObjects();
+  void destroySyncObjects();
+  void destroySwapChain();
 };
 } // namespace Renderer

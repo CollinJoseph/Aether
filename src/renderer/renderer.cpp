@@ -1,30 +1,35 @@
 #include "renderer.hpp"
 
 namespace Renderer {
-Renderer::Renderer(GLFWwindow *window) : m_context(window) {
+
+Renderer::Renderer(Engine::Window &window)
+    : m_window(window), m_context(window.getWindow()) {
   createRenderPass();
   createGraphicsPipeline();
   createFramebuffers();
 }
 
-Renderer::~Renderer() {
-  m_context.waitIdle();
-  for (auto frameBuffer : m_swapChainFramebuffers) {
-    vkDestroyFramebuffer(m_context.getDevice(), frameBuffer, nullptr);
-  }
-  vkDestroyPipeline(m_context.getDevice(), m_graphicsPipeline, nullptr);
-  vkDestroyPipelineLayout(m_context.getDevice(), m_pipelineLayout, nullptr);
-  vkDestroyRenderPass(m_context.getDevice(), m_renderPass, nullptr);
-}
 void Renderer::drawFrame() {
   m_context.beginFrame();
   const auto imageIntex = m_context.acquireNextSwapChainImage();
+  // INFO: recreate swapchain if vulkan says we should
+  if (imageIntex < 0) {
+    recreateSwapChain();
+    return;
+  }
+  m_context.resetCurrentInFlightFence();
   vkResetCommandBuffer(
       m_context.getCommandBuffers()[m_context.getCurrentFrame()], 0);
   recordCommandBuffer(
       m_context.getCommandBuffers()[m_context.getCurrentFrame()], imageIntex);
   m_context.endFrame(imageIntex);
   m_context.presentFrame(imageIntex);
+  // INFO: recreate swapchain if glfw recreates
+  if (m_window.didWindowResize()) {
+    m_window.resetWindowResized();
+    recreateSwapChain();
+    return;
+  }
   m_context.nextFrame();
 }
 
@@ -223,6 +228,7 @@ void Renderer::createGraphicsPipeline() {
   vkDestroyShaderModule(m_context.getDevice(), vertShaderModule, nullptr);
   vkDestroyShaderModule(m_context.getDevice(), fragShaderModule, nullptr);
 }
+
 void Renderer::createFramebuffers() {
   const std::vector<VkImageView> swapChainImageViews =
       m_context.getImageViews();
@@ -245,6 +251,12 @@ void Renderer::createFramebuffers() {
                             &m_swapChainFramebuffers[i]) != VK_SUCCESS) {
       throw std::runtime_error("failed to create framebuffer!");
     }
+  }
+}
+
+void Renderer::destroyFramebuffers() {
+  for (auto frameBuffer : m_swapChainFramebuffers) {
+    vkDestroyFramebuffer(m_context.getDevice(), frameBuffer, nullptr);
   }
 }
 
@@ -299,6 +311,13 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer,
   }
 }
 
+void Renderer::recreateSwapChain() {
+  m_context.waitForDeviceIdle();
+  destroyFramebuffers();
+  m_context.recreateSwapChain();
+  createFramebuffers();
+}
+
 VkShaderModule Renderer::createShaderModule(std::vector<char> &shaderCode) {
   VkShaderModuleCreateInfo createInfo{};
   createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -310,6 +329,14 @@ VkShaderModule Renderer::createShaderModule(std::vector<char> &shaderCode) {
     throw std::runtime_error("failed to create shader module!");
   }
   return shaderModule;
+}
+
+Renderer::~Renderer() {
+  m_context.waitForDeviceIdle();
+  destroyFramebuffers();
+  vkDestroyPipeline(m_context.getDevice(), m_graphicsPipeline, nullptr);
+  vkDestroyPipelineLayout(m_context.getDevice(), m_pipelineLayout, nullptr);
+  vkDestroyRenderPass(m_context.getDevice(), m_renderPass, nullptr);
 }
 
 } // namespace Renderer

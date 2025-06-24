@@ -9,11 +9,15 @@ public:
   void close();
   bool shouldWindowClose();
   void pollEvents();
-  GLFWwindow *getWindow();
+  GLFWwindow *getWindow() const;
+  bool didWindowResize() const;
+  void resetWindowResized();
+  static void windowResizeCallback(GLFWwindow *window, int width, int height);
 
 private:
   GLFWwindow *m_window;
   int m_height;
   int m_width;
+  bool m_windowResized;
 };
 } // namespace Engine

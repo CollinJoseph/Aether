@@ -2,6 +2,7 @@
 #include "rendererCommon.hpp"
 
 namespace Renderer {
+
 VulkanContext::VulkanContext(GLFWwindow *window) {
   m_window = window;
   createInstance();
@@ -365,6 +366,7 @@ void VulkanContext::createCommandBuffers() {
     throw std::runtime_error("failed to allocate command buffers!");
   }
 }
+
 void VulkanContext::createSyncObjects() {
   m_imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
   m_renderFinishedSemaphores.resize(m_swapchainImages.size());
@@ -397,7 +399,7 @@ void VulkanContext::createSyncObjects() {
   }
 }
 
-VulkanContext::~VulkanContext() {
+void VulkanContext::destroySyncObjects() {
   for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
     vkDestroySemaphore(m_device, m_imageAvailableSemaphores[i], nullptr);
     vkDestroyFence(m_device, m_inFlightFences[i], nullptr);
@@ -406,19 +408,17 @@ VulkanContext::~VulkanContext() {
   for (size_t i = 0; i < m_swapchainImages.size(); i++) {
     vkDestroySemaphore(m_device, m_renderFinishedSemaphores[i], nullptr);
   }
+}
 
-  vkDestroyCommandPool(m_device, m_commandPool, nullptr);
-
+void VulkanContext::destroySwapChain() {
   for (auto imageView : m_swapchainImageViews) {
     vkDestroyImageView(m_device, imageView, nullptr);
   }
   vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
-  vkDestroyDevice(m_device, nullptr);
-  vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
-  vkDestroyInstance(m_instance, nullptr);
 }
 
 VkDevice VulkanContext::getDevice() const { return m_device; }
+
 SwapChainInfo VulkanContext::getSwapChainInfo() const {
   return {m_swapchainImageFormat, m_swapchainExtent};
 }
@@ -434,8 +434,12 @@ const std::vector<VkCommandBuffer> &VulkanContext::getCommandBuffers() const {
 void VulkanContext::beginFrame() {
   vkWaitForFences(m_device, 1, &m_inFlightFences[m_currentFrame], VK_TRUE,
                   UINT64_MAX);
+}
+
+void VulkanContext::resetCurrentInFlightFence() {
   vkResetFences(m_device, 1, &m_inFlightFences[m_currentFrame]);
 }
+
 void VulkanContext::endFrame(uint32_t imageIndex) {
   VkSemaphore waitSemaphores[] = {m_imageAvailableSemaphores[m_currentFrame]};
   VkSemaphore signalSemaphores[] = {m_renderFinishedSemaphores[imageIndex]};
@@ -461,13 +465,25 @@ void VulkanContext::endFrame(uint32_t imageIndex) {
   }
 }
 
-uint32_t VulkanContext::acquireNextSwapChainImage() {
+int64_t VulkanContext::acquireNextSwapChainImage() {
+
+  /*
+   * INFO: Making a guess that image index is always going to positive, to
+   *  return the swapchain is suboptimal using -1
+   */
+
   uint32_t imageIndex;
-  vkAcquireNextImageKHR(m_device, m_swapchain, UINT64_MAX,
-                        m_imageAvailableSemaphores[m_currentFrame],
-                        VK_NULL_HANDLE, &imageIndex);
+  VkResult result = vkAcquireNextImageKHR(
+      m_device, m_swapchain, UINT64_MAX,
+      m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+  if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+    return -1;
+  } else if (result != VK_SUCCESS) {
+    throw std::runtime_error("failed to present swap chain image!");
+  }
   return imageIndex;
 }
+
 void VulkanContext::presentFrame(uint32_t imageIndex) {
 
   VkSemaphore waitSemaphores[] = {m_imageAvailableSemaphores[m_currentFrame]};
@@ -487,10 +503,30 @@ void VulkanContext::presentFrame(uint32_t imageIndex) {
 
   vkQueuePresentKHR(m_presentQueue, &presentInfo);
 }
+
 void VulkanContext::nextFrame() {
   m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
+
+void VulkanContext::recreateSwapChain() {
+  destroySwapChain();
+  createSwapChain();
+  createImageViews();
+}
+
 uint32_t VulkanContext::getCurrentFrame() const { return m_currentFrame; }
-void VulkanContext::waitIdle() const { vkDeviceWaitIdle(m_device); }
+
+void VulkanContext::waitForDeviceIdle() const { vkDeviceWaitIdle(m_device); }
+
+VulkanContext::~VulkanContext() {
+  destroySwapChain();
+  destroySyncObjects();
+
+  vkDestroyCommandPool(m_device, m_commandPool, nullptr);
+
+  vkDestroyDevice(m_device, nullptr);
+  vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
+  vkDestroyInstance(m_instance, nullptr);
+}
 
 } // namespace Renderer
