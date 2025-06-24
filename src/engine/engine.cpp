@@ -1,21 +1,25 @@
-#include "engine/engine.hpp"
-#include <iostream>
+#include "engine.hpp"
+#include "renderer/renderer.hpp"
+#include "window.hpp"
 
 namespace Engine {
 
-Engine::Engine() {
+Application::Application() : window(800, 600), renderer(window.getWindow()) {}
+
+Application Application::createApplication() { return {Application()}; }
+
+void Application::run() {
+  mainLoop();
+  cleanup();
 }
 
-void Engine::Init() {
-    std::cout << "Engine Init\n";
+void Application::mainLoop() {
+  while (!window.shouldWindowClose()) {
+    window.pollEvents();
+    renderer.drawFrame();
+  }
 }
 
-void Engine::Run() {
-    std::cout << "Engine Run\n";
-}
+void Application::cleanup() { window.close(); }
 
-void Engine::Shutdown() {
-    std::cout << "Shutting down\n";
-}
-
-}
+} // namespace Engine

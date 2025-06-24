@@ -1,15 +1,12 @@
-#include <iostream>
 #include <engine/engine.hpp>
+#include <iostream>
 
-int main()
-{
-    std::cout << "Hello from the Sandbox app!" << std::endl;
+int main() {
+  std::cout << "Hello from the Sandbox app!" << std::endl;
+  std::vector<VkDeviceMemory> deviceMemoryAllocations;
 
-    Engine::Engine engine;
+  Engine::Application engine = Engine::Application::createApplication();
+  engine.run();
 
-    engine.Init();
-    engine.Run();
-    engine.Shutdown();
-
-    return 0;
+  return 0;
 }
