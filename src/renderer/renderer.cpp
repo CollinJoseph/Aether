@@ -2,35 +2,20 @@
 
 namespace Renderer {
 
-Renderer::Renderer(Engine::Window &window)
-    : m_window(window), m_context(window.getWindow()) {
-  createRenderPass();
+Renderer::Renderer(Engine::Window &window) : m_context(window) {
   createGraphicsPipeline();
-  createFramebuffers();
 }
 
 void Renderer::drawFrame() {
-  m_context.beginFrame();
-  const auto imageIntex = m_context.acquireNextSwapChainImage();
-  // INFO: recreate swapchain if vulkan says we should
+  const auto imageIntex = m_context.beginFrame();
   if (imageIntex < 0) {
-    recreateSwapChain();
     return;
   }
-  m_context.resetCurrentInFlightFence();
   vkResetCommandBuffer(
       m_context.getCommandBuffers()[m_context.getCurrentFrame()], 0);
   recordCommandBuffer(
       m_context.getCommandBuffers()[m_context.getCurrentFrame()], imageIntex);
   m_context.endFrame(imageIntex);
-  m_context.presentFrame(imageIntex);
-  // INFO: recreate swapchain if glfw recreates
-  if (m_window.didWindowResize()) {
-    m_window.resetWindowResized();
-    recreateSwapChain();
-    return;
-  }
-  m_context.nextFrame();
 }
 
 std::vector<char> Renderer::readFile(const std::string &filename) {
@@ -49,53 +34,6 @@ std::vector<char> Renderer::readFile(const std::string &filename) {
   file.close();
 
   return buffer;
-}
-
-void Renderer::createRenderPass() {
-
-  VkAttachmentDescription colorAttachment{};
-  colorAttachment.format = m_context.getSwapChainInfo().format;
-  colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-
-  colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-
-  colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-  colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-
-  colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-  VkAttachmentReference colorAttachmentRef{};
-  colorAttachmentRef.attachment = 0;
-  colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-  VkSubpassDescription subpass{};
-  subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-  subpass.colorAttachmentCount = 1;
-  subpass.pColorAttachments = &colorAttachmentRef;
-
-  VkSubpassDependency dependency{};
-  dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-  dependency.dstSubpass = 0;
-  dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  dependency.srcAccessMask = 0;
-  dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-  VkRenderPassCreateInfo renderPassInfo{};
-  renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  renderPassInfo.attachmentCount = 1;
-  renderPassInfo.pAttachments = &colorAttachment;
-  renderPassInfo.subpassCount = 1;
-  renderPassInfo.pSubpasses = &subpass;
-  renderPassInfo.dependencyCount = 1;
-  renderPassInfo.pDependencies = &dependency;
-
-  if (vkCreateRenderPass(m_context.getDevice(), &renderPassInfo, nullptr,
-                         &m_renderPass) != VK_SUCCESS) {
-    throw std::runtime_error("failed to create render pass!");
-  }
 }
 
 void Renderer::createGraphicsPipeline() {
@@ -213,7 +151,7 @@ void Renderer::createGraphicsPipeline() {
   pipelineInfo.pDynamicState = &dynamicState;
 
   pipelineInfo.layout = m_pipelineLayout;
-  pipelineInfo.renderPass = m_renderPass;
+  pipelineInfo.renderPass = m_context.getRenderPass();
   pipelineInfo.subpass = 0;
 
   pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
@@ -229,37 +167,6 @@ void Renderer::createGraphicsPipeline() {
   vkDestroyShaderModule(m_context.getDevice(), fragShaderModule, nullptr);
 }
 
-void Renderer::createFramebuffers() {
-  const std::vector<VkImageView> swapChainImageViews =
-      m_context.getImageViews();
-  auto [width, height] = m_context.getSwapChainInfo().extent;
-
-  m_swapChainFramebuffers.resize(swapChainImageViews.size());
-  for (uint32_t i = 0; i < swapChainImageViews.size(); i++) {
-    VkImageView attachments[] = {swapChainImageViews[i]};
-
-    VkFramebufferCreateInfo framebufferInfo{};
-    framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebufferInfo.renderPass = m_renderPass;
-    framebufferInfo.attachmentCount = 1;
-    framebufferInfo.pAttachments = attachments;
-    framebufferInfo.width = width;
-    framebufferInfo.height = height;
-    framebufferInfo.layers = 1;
-
-    if (vkCreateFramebuffer(m_context.getDevice(), &framebufferInfo, nullptr,
-                            &m_swapChainFramebuffers[i]) != VK_SUCCESS) {
-      throw std::runtime_error("failed to create framebuffer!");
-    }
-  }
-}
-
-void Renderer::destroyFramebuffers() {
-  for (auto frameBuffer : m_swapChainFramebuffers) {
-    vkDestroyFramebuffer(m_context.getDevice(), frameBuffer, nullptr);
-  }
-}
-
 void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer,
                                    uint32_t imageIndex) {
   VkCommandBufferBeginInfo beginInfo{};
@@ -271,8 +178,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer,
 
   VkRenderPassBeginInfo renderPassInfo{};
   renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-  renderPassInfo.renderPass = m_renderPass;
-  renderPassInfo.framebuffer = m_swapChainFramebuffers[imageIndex];
+  renderPassInfo.renderPass = m_context.getRenderPass();
+  renderPassInfo.framebuffer = m_context.getFramebuffers()[imageIndex];
   renderPassInfo.renderArea.offset = {0, 0};
   renderPassInfo.renderArea.extent = m_context.getSwapChainInfo().extent;
 
@@ -311,13 +218,6 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer,
   }
 }
 
-void Renderer::recreateSwapChain() {
-  m_context.waitForDeviceIdle();
-  destroyFramebuffers();
-  m_context.recreateSwapChain();
-  createFramebuffers();
-}
-
 VkShaderModule Renderer::createShaderModule(std::vector<char> &shaderCode) {
   VkShaderModuleCreateInfo createInfo{};
   createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -332,11 +232,9 @@ VkShaderModule Renderer::createShaderModule(std::vector<char> &shaderCode) {
 }
 
 Renderer::~Renderer() {
-  m_context.waitForDeviceIdle();
-  destroyFramebuffers();
+  m_context.waitForIdle();
   vkDestroyPipeline(m_context.getDevice(), m_graphicsPipeline, nullptr);
   vkDestroyPipelineLayout(m_context.getDevice(), m_pipelineLayout, nullptr);
-  vkDestroyRenderPass(m_context.getDevice(), m_renderPass, nullptr);
 }
 
 } // namespace Renderer

@@ -1,31 +1,31 @@
 #pragma once
+#include "engine/window.hpp"
 #include "pch/pch.hpp"
 #include "vulkanStructs.hpp"
 
 namespace Renderer {
+
+inline constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+
 class VulkanContext {
 public:
-  explicit VulkanContext(GLFWwindow *window);
-  ~VulkanContext();
+  explicit VulkanContext(Engine::Window &window);
   VkDevice getDevice() const;
-  SwapChainInfo getSwapChainInfo() const;
-  const std::vector<VkImageView> &getImageViews() const;
+  void waitForIdle() const;
   const std::vector<VkCommandBuffer> &getCommandBuffers() const;
-  void beginFrame();
-  void resetCurrentInFlightFence();
+  const std::vector<VkFramebuffer> &getFramebuffers() const;
+  const VkRenderPass &getRenderPass() const;
+  void destroyRenderPass();
+  SwapChainInfo getSwapChainInfo() const;
+  int64_t beginFrame();
   void endFrame(uint32_t imageIndex);
-  void waitForDeviceIdle() const;
-  // TODO: Move to another class
-  int64_t acquireNextSwapChainImage();
-  void presentFrame(uint32_t imageIndex);
-  void nextFrame();
-  void recreateSwapChain();
   uint32_t getCurrentFrame() const;
+  ~VulkanContext();
 
 private:
   inline static const std::vector<const char *> deviceExtensions = {
       VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-  GLFWwindow *m_window = nullptr;
+  Engine::Window &m_window;
   VkInstance m_instance = VK_NULL_HANDLE;
   VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
   VkDevice m_device = VK_NULL_HANDLE;
@@ -36,6 +36,8 @@ private:
   VkFormat m_swapchainImageFormat = VK_FORMAT_UNDEFINED;
   VkExtent2D m_swapchainExtent = {};
   VkCommandPool m_commandPool = VK_NULL_HANDLE;
+  VkRenderPass m_renderPass;
+  std::vector<VkFramebuffer> m_swapChainFramebuffers;
   std::vector<VkImage> m_swapchainImages = {};
   std::vector<VkImageView> m_swapchainImageViews = {};
   std::vector<VkCommandBuffer> m_commandBuffers;
@@ -59,11 +61,15 @@ private:
   VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities);
   SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) const;
   void createImageViews();
+  void createFramebuffers();
+  void destroyFramebuffers();
   void createSurface();
   void createCommandPool();
   void createCommandBuffers();
   void createSyncObjects();
   void destroySyncObjects();
   void destroySwapChain();
+  void createRenderPass();
+  void recreateSwapChain();
 };
 } // namespace Renderer

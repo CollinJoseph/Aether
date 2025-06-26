@@ -22,9 +22,10 @@ Window::Window(int width, int height) {
 
 GLFWwindow *Window::getWindow() const { return m_window; }
 
-bool Window::didWindowResize() const { return m_windowResized; }
-
-void Window::resetWindowResized() { m_windowResized = false; }
+WindowProperties Window::getWindowProperties() {
+  glfwGetFramebufferSize(m_window, &m_width, &m_height);
+  return {m_width, m_height};
+}
 
 void Window::windowResizeCallback(GLFWwindow *window, int width, int height) {
   auto *windowPtr = static_cast<Window *>(glfwGetWindowUserPointer(window));
