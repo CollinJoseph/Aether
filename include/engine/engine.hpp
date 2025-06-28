@@ -1,17 +1,23 @@
 #pragma once
-#include "renderer/renderer.hpp"
-#include "window.hpp"
+#include <memory>
+
+namespace Renderer {
+class Renderer;
+}
 
 namespace Engine {
+class Window;
+
 class Application {
 public:
   static Application createApplication();
+  ~Application();
   void run();
 
 private:
   Application();
-  Window window;
-  Renderer::Renderer renderer;
+  std::unique_ptr<Window> m_window;
+  std::unique_ptr<Renderer::Renderer> m_renderer;
   void mainLoop();
   void cleanup();
 };
