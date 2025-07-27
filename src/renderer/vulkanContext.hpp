@@ -1,7 +1,8 @@
 #pragma once
-#include "engine/window.hpp"
 #include "pch/pch.hpp"
+#include "vmaUsage.hpp"
 #include "vulkanStructs.hpp"
+#include "window.hpp"
 
 namespace Renderer {
 
@@ -20,6 +21,14 @@ public:
   int64_t beginFrame();
   void endFrame(uint32_t imageIndex);
   uint32_t getCurrentFrame() const;
+  VmaAllocator getAllocator() const;
+
+  // Buffer related operations
+  void copyBuffersToGPU(const std::vector<CopyBufferInfo> &buffers);
+  AllocatedBuffer createBuffer(const VkDeviceSize size,
+                               const VkBufferUsageFlags usage,
+                               const VmaMemoryUsage memoryUsage) const;
+  void destroyBuffer(AllocatedBuffer buffer);
   ~VulkanContext();
 
 private:
@@ -35,8 +44,11 @@ private:
   VkSwapchainKHR m_swapchain = VK_NULL_HANDLE;
   VkFormat m_swapchainImageFormat = VK_FORMAT_UNDEFINED;
   VkExtent2D m_swapchainExtent = {};
+  // Info: Command pools are externally synchronized, meaning that a command
+  //  pool must not be used concurrently in multiple threads.
   VkCommandPool m_commandPool = VK_NULL_HANDLE;
   VkRenderPass m_renderPass;
+  VmaAllocator m_allocator;
   std::vector<VkFramebuffer> m_swapChainFramebuffers;
   std::vector<VkImage> m_swapchainImages = {};
   std::vector<VkImageView> m_swapchainImageViews = {};
@@ -45,6 +57,7 @@ private:
   std::vector<VkSemaphore> m_renderFinishedSemaphores;
   std::vector<VkFence> m_inFlightFences;
   uint32_t m_currentFrame = 0;
+  UploadContext m_uploadContext;
 
 private:
   void createInstance();
@@ -62,14 +75,18 @@ private:
   SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) const;
   void createImageViews();
   void createFramebuffers();
-  void destroyFramebuffers();
   void createSurface();
   void createCommandPool();
   void createCommandBuffers();
   void createSyncObjects();
   void destroySyncObjects();
+  void createDescriptorPool();
+  void destroyDescriptorPool();
+  void createVMA();
   void destroySwapChain();
   void createRenderPass();
   void recreateSwapChain();
+  void createUploadContext();
+  void destroyUploadContext();
 };
 } // namespace Renderer

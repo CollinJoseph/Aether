@@ -1,20 +1,111 @@
 #include "renderer.hpp"
+#include <glm/gtx/transform.hpp>
 
 namespace Renderer {
-
 Renderer::Renderer(Engine::Window &window) : m_context(window) {
+  createDescriptorSetLayout();
+  createVertexBuffer();
+  createUniformBuffers();
   createGraphicsPipeline();
+}
+
+void Renderer::createDescriptorSetLayout() {
+  VkDescriptorSetLayoutBinding bindings{};
+  bindings.binding = 0;
+  bindings.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  bindings.descriptorCount = 1;
+  bindings.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+  bindings.pImmutableSamplers = nullptr;
+
+  VkDescriptorSetLayoutCreateInfo layoutInfo{};
+  layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  layoutInfo.bindingCount = 1;
+  layoutInfo.pBindings = &bindings;
+  if (vkCreateDescriptorSetLayout(m_context.getDevice(), &layoutInfo, nullptr,
+                                  &m_descriptorSetLayout)) {
+    throw std::runtime_error("failed to create descriptor set layout!");
+  };
+}
+
+void Renderer::createVertexBuffer() {
+  const size_t bufferSize = vertices.size() * sizeof(Vertex);
+  VkBufferCreateInfo stagingBufferInfo = {};
+  stagingBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  stagingBufferInfo.size = bufferSize;
+  stagingBufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+  VmaAllocationCreateInfo stagingAllocationInfo = {};
+  stagingAllocationInfo.usage = VMA_MEMORY_USAGE_AUTO;
+  stagingAllocationInfo.flags =
+      VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+
+  VkBuffer stagingBuffer;
+  VmaAllocation stagingAllocation;
+  vmaCreateBuffer(m_context.getAllocator(), &stagingBufferInfo,
+                  &stagingAllocationInfo, &stagingBuffer, &stagingAllocation,
+                  nullptr);
+  vmaCopyMemoryToAllocation(m_context.getAllocator(), vertices.data(),
+                            stagingAllocation, 0, bufferSize);
+
+  VkBufferCreateInfo vertexBufferInfo = {};
+  vertexBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  vertexBufferInfo.size = bufferSize;
+  vertexBufferInfo.usage =
+      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+  VmaAllocationCreateInfo vertexAllocationInfo = {};
+  vertexAllocationInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+
+  vmaCreateBuffer(m_context.getAllocator(), &vertexBufferInfo,
+                  &vertexAllocationInfo, &m_vertexBuffer, &m_vertexAllocation,
+                  nullptr);
+
+  std::vector<CopyBufferInfo> copyBufferInfos = {
+      {stagingBuffer, m_vertexBuffer, bufferSize}};
+
+  m_context.copyBuffersToGPU(copyBufferInfos);
+  vmaDestroyBuffer(m_context.getAllocator(), stagingBuffer, stagingAllocation);
+}
+
+void Renderer::createUniformBuffers() {
+  VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+  uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+  for (auto &uniformBuffer : uniformBuffers) {
+    uniformBuffer = m_context.createBuffer(
+        bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_AUTO);
+  }
+}
+
+void Renderer::updateUniformBuffers(uint32_t currentImage) {
+  UniformBufferObject ubo{};
+  SwapChainInfo swapChainInfo = m_context.getSwapChainInfo();
+  ubo.view =
+      glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
+                  glm::vec3(0.0f, 0.0f, 1.0f));
+  ubo.projection = glm::perspective(glm::radians(45.0f),
+                                    (float)swapChainInfo.extent.width /
+                                        (float)swapChainInfo.extent.height,
+                                    0.1f, 10.0f);
+
+  memcpy(uniformBuffers[currentImage].info.pMappedData, &ubo,
+         sizeof(UniformBufferObject));
+}
+
+void Renderer::destroyUniformBuffers() {
+  for (auto &uniformBuffer : uniformBuffers) {
+    m_context.destroyBuffer(uniformBuffer);
+  }
 }
 
 void Renderer::drawFrame() {
   const auto imageIntex = m_context.beginFrame();
+  const auto currentFrame = m_context.getCurrentFrame();
   if (imageIntex < 0) {
     return;
   }
-  vkResetCommandBuffer(
-      m_context.getCommandBuffers()[m_context.getCurrentFrame()], 0);
-  recordCommandBuffer(
-      m_context.getCommandBuffers()[m_context.getCurrentFrame()], imageIntex);
+  updateUniformBuffers(currentFrame);
+  vkResetCommandBuffer(m_context.getCommandBuffers()[currentFrame], 0);
+  recordCommandBuffer(m_context.getCommandBuffers()[currentFrame], imageIntex);
   m_context.endFrame(imageIntex);
 }
 
@@ -63,12 +154,18 @@ void Renderer::createGraphicsPipeline() {
                                                     fragShaderStageCreateInfo};
 
   // Fixed Funtion stages
+  auto bindingDesc = Vertex::getBindingDescription();
+  auto attributeDescs = Vertex::getAttributeDescriptions();
 
   VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = {};
   vertexInputStateCreateInfo.sType =
       VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-  vertexInputStateCreateInfo.vertexBindingDescriptionCount = 0;
-  vertexInputStateCreateInfo.vertexAttributeDescriptionCount = 0;
+  vertexInputStateCreateInfo.vertexBindingDescriptionCount = 1;
+  vertexInputStateCreateInfo.vertexAttributeDescriptionCount =
+      attributeDescs.size();
+  vertexInputStateCreateInfo.pVertexAttributeDescriptions =
+      attributeDescs.data();
+  vertexInputStateCreateInfo.pVertexBindingDescriptions = &bindingDesc;
 
   VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
   inputAssembly.sType =
@@ -132,6 +229,8 @@ void Renderer::createGraphicsPipeline() {
 
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
   pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipelineLayoutInfo.setLayoutCount = 1;
+  pipelineLayoutInfo.pSetLayouts = &m_descriptorSetLayout;
 
   if (vkCreatePipelineLayout(m_context.getDevice(), &pipelineLayoutInfo,
                              nullptr, &m_pipelineLayout) != VK_SUCCESS) {
@@ -193,6 +292,10 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer,
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     m_graphicsPipeline);
 
+  VkBuffer vertexBuffers[] = {m_vertexBuffer};
+  VkDeviceSize offsets[] = {0};
+  vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+
   auto swapChainExtent = m_context.getSwapChainInfo().extent;
 
   VkViewport viewport{};
@@ -209,7 +312,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer,
   scissor.extent = swapChainExtent;
   vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-  vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+  vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 
   vkCmdEndRenderPass(commandBuffer);
 
@@ -233,6 +336,13 @@ VkShaderModule Renderer::createShaderModule(std::vector<char> &shaderCode) {
 
 Renderer::~Renderer() {
   m_context.waitForIdle();
+  for (AllocatedBuffer buffer : uniformBuffers) {
+    m_context.destroyBuffer(buffer);
+  }
+  vkDestroyDescriptorSetLayout(m_context.getDevice(), m_descriptorSetLayout,
+                               nullptr);
+  vmaDestroyBuffer(m_context.getAllocator(), m_vertexBuffer,
+                   m_vertexAllocation);
   vkDestroyPipeline(m_context.getDevice(), m_graphicsPipeline, nullptr);
   vkDestroyPipelineLayout(m_context.getDevice(), m_pipelineLayout, nullptr);
 }
