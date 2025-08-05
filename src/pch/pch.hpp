@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <assert.h>
 #include <cstdint>
 #include <cstring>
 #include <fstream>

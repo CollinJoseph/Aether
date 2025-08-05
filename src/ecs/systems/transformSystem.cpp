@@ -4,7 +4,7 @@
 #include <entt/entity/registry.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-namespace Engine::ECS::Systems {
+namespace Aether::ECS::Systems {
 void TransformSystem::update(entt::registry &reg) {
   const auto view =
       reg.view<Components::Position, Components::Rotation, Components::Scale>();
@@ -18,4 +18,4 @@ void TransformSystem::update(entt::registry &reg) {
   });
 }
 
-} // namespace Engine::ECS::Systems
+} // namespace Aether::ECS::Systems

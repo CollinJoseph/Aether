@@ -5,9 +5,10 @@ add_library(Aether STATIC
         engine/engine.cpp
         renderer/window.cpp
         renderer/renderer.cpp
+        renderer/vulkan/vulkanBuffer.cpp
+        renderer/vulkan/vulkanHelpers.cpp
         renderer/vulkanContextInitialization.cpp
         renderer/vulkanContextSwapChain.cpp
-        renderer/vulkanContextBuffer.cpp
         renderer/vulkanContextRenderPass.cpp
         renderer/vulkanContextFrame.cpp
         renderer/vmaUsage.cpp

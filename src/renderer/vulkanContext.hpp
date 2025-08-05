@@ -4,16 +4,18 @@
 #include "vulkanStructs.hpp"
 #include "window.hpp"
 
-namespace Renderer {
+namespace Aether::Renderer::Vulkan {
 
 inline constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
 class VulkanContext {
 public:
-  explicit VulkanContext(Engine::Window &window);
+  explicit VulkanContext(Window &window);
   VkDevice getDevice() const;
   void waitForIdle() const;
   const std::vector<VkCommandBuffer> &getCommandBuffers() const;
+  [[nodiscard]] VkCommandPool getCommandPool() const;
+  [[nodiscard]] VkQueue getGraphicsQueue() const;
   const std::vector<VkFramebuffer> &getFramebuffers() const;
   const VkRenderPass &getRenderPass() const;
   void destroyRenderPass();
@@ -22,19 +24,12 @@ public:
   void endFrame(uint32_t imageIndex);
   uint32_t getCurrentFrame() const;
   VmaAllocator getAllocator() const;
-
-  // Buffer related operations
-  void copyBuffersToGPU(const std::vector<CopyBufferInfo> &buffers);
-  AllocatedBuffer createBuffer(const VkDeviceSize size,
-                               const VkBufferUsageFlags usage,
-                               const VmaMemoryUsage memoryUsage) const;
-  void destroyBuffer(AllocatedBuffer buffer);
   ~VulkanContext();
 
 private:
   inline static const std::vector<const char *> deviceExtensions = {
       VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-  Engine::Window &m_window;
+  Window &m_window;
   VkInstance m_instance = VK_NULL_HANDLE;
   VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
   VkDevice m_device = VK_NULL_HANDLE;
@@ -89,4 +84,4 @@ private:
   void createUploadContext();
   void destroyUploadContext();
 };
-} // namespace Renderer
+} // namespace Aether::Renderer::Vulkan

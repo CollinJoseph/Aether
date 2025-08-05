@@ -1,10 +1,13 @@
 #pragma once
 #include "pch/pch.hpp"
+#include "vulkan/vulkanBuffer.hpp"
 #include "vulkanContext.hpp"
 #include "window.hpp"
-#include <glm/glm.hpp>
 
-namespace Renderer {
+#include <glm/glm.hpp>
+#include <memory>
+
+namespace Aether::Renderer {
 
 struct Vertex {
   glm::vec2 position;
@@ -34,7 +37,7 @@ struct Vertex {
 
 class Renderer {
 public:
-  explicit Renderer(Engine::Window &window);
+  explicit Renderer(Window &window);
   ~Renderer();
   void drawFrame();
   const std::vector<Vertex> vertices = {
@@ -48,15 +51,14 @@ public:
   };
 
 private:
-  VulkanContext m_context;
+  Vulkan::VulkanContext m_context;
   VkDescriptorSetLayout m_descriptorSetLayout;
   VkPipelineLayout m_pipelineLayout;
   VkPipeline m_graphicsPipeline;
 
   const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
-  VmaAllocation m_vertexAllocation;
-  VkBuffer m_vertexBuffer;
-  std::vector<AllocatedBuffer> uniformBuffers;
+  std::unique_ptr<Vulkan::VulkanBuffer> m_vertexBuffer;
+  std::vector<Vulkan::VulkanBuffer> m_uniformBuffers;
 
 private:
   static std::vector<char> readFile(const std::string &filename);
@@ -69,4 +71,4 @@ private:
   void updateUniformBuffers(uint32_t currentImage);
   void destroyUniformBuffers();
 };
-} // namespace Renderer
+} // namespace Aether::Renderer

@@ -1,7 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 
-namespace Engine::ECS::Components {
+namespace Aether::ECS::Components {
 struct Position {
   float x;
   float y;
@@ -19,4 +19,4 @@ struct Scale {
 struct Transform2D {
   glm::mat4 transform;
 };
-} // namespace Engine::ECS::Components
+} // namespace Aether::ECS::Components

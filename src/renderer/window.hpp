@@ -2,7 +2,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-namespace Engine {
+namespace Aether {
 struct WindowProperties {
   int width, height;
 };
@@ -25,4 +25,4 @@ private:
   int m_height;
   int m_width;
 };
-} // namespace Engine
+} // namespace Aether

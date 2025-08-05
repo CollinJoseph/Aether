@@ -6,7 +6,7 @@
 
 #include <entt/entt.hpp>
 
-namespace Engine {
+namespace Aether {
 class Application {
 public:
   static Application createApplication();
@@ -26,4 +26,4 @@ private:
   void testing();
   void cleanup();
 };
-} // namespace Engine
+} // namespace Aether

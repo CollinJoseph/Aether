@@ -5,7 +5,7 @@
 
 #include <iostream>
 
-namespace Engine {
+namespace Aether {
 
 Window::Window(int width, int height) {
   glfwInit();
@@ -41,4 +41,4 @@ bool Window::shouldWindowClose() { return glfwWindowShouldClose(m_window); }
 
 void Window::pollEvents() { glfwPollEvents(); }
 
-} // namespace Engine
+} // namespace Aether

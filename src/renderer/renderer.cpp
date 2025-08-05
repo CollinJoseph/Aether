@@ -1,11 +1,15 @@
 #include "renderer.hpp"
+
+#include "vulkan/vulkanBuffer.hpp"
+#include "vulkan/vulkanHelpers.hpp"
+
 #include <glm/gtx/transform.hpp>
 
-namespace Renderer {
-Renderer::Renderer(Engine::Window &window) : m_context(window) {
+namespace Aether::Renderer {
+Renderer::Renderer(Window &window) : m_context(window) {
   createDescriptorSetLayout();
   createVertexBuffer();
-  createUniformBuffers();
+  // createUniformBuffers();
   createGraphicsPipeline();
 }
 
@@ -29,56 +33,38 @@ void Renderer::createDescriptorSetLayout() {
 
 void Renderer::createVertexBuffer() {
   const size_t bufferSize = vertices.size() * sizeof(Vertex);
-  VkBufferCreateInfo stagingBufferInfo = {};
-  stagingBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  stagingBufferInfo.size = bufferSize;
-  stagingBufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
-  VmaAllocationCreateInfo stagingAllocationInfo = {};
-  stagingAllocationInfo.usage = VMA_MEMORY_USAGE_AUTO;
-  stagingAllocationInfo.flags =
-      VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+  Vulkan::VulkanBuffer stagingBuffer(
+      m_context.getAllocator(), bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+      VMA_MEMORY_USAGE_AUTO,
+      VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+  stagingBuffer.copyDataToBuffer(vertices.data(), bufferSize);
 
-  VkBuffer stagingBuffer;
-  VmaAllocation stagingAllocation;
-  vmaCreateBuffer(m_context.getAllocator(), &stagingBufferInfo,
-                  &stagingAllocationInfo, &stagingBuffer, &stagingAllocation,
-                  nullptr);
-  vmaCopyMemoryToAllocation(m_context.getAllocator(), vertices.data(),
-                            stagingAllocation, 0, bufferSize);
+  m_vertexBuffer = std::make_unique<Vulkan::VulkanBuffer>(
+      m_context.getAllocator(), bufferSize,
+      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+      VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE);
 
-  VkBufferCreateInfo vertexBufferInfo = {};
-  vertexBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-  vertexBufferInfo.size = bufferSize;
-  vertexBufferInfo.usage =
-      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-
-  VmaAllocationCreateInfo vertexAllocationInfo = {};
-  vertexAllocationInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-
-  vmaCreateBuffer(m_context.getAllocator(), &vertexBufferInfo,
-                  &vertexAllocationInfo, &m_vertexBuffer, &m_vertexAllocation,
-                  nullptr);
-
-  std::vector<CopyBufferInfo> copyBufferInfos = {
-      {stagingBuffer, m_vertexBuffer, bufferSize}};
-
-  m_context.copyBuffersToGPU(copyBufferInfos);
-  vmaDestroyBuffer(m_context.getAllocator(), stagingBuffer, stagingAllocation);
+  VkCommandBuffer commandBuffer =
+      Vulkan::VulkanHelpers::beginSingleTimeCommands(m_context);
+  VkBufferCopy copyRegion{0, 0, bufferSize};
+  vkCmdCopyBuffer(commandBuffer, stagingBuffer.getBuffer(),
+                  m_vertexBuffer->getBuffer(), 1, &copyRegion);
+  Vulkan::VulkanHelpers::endSingleTimeCommands(m_context, commandBuffer);
 }
 
 void Renderer::createUniformBuffers() {
-  VkDeviceSize bufferSize = sizeof(UniformBufferObject);
-  uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-  for (auto &uniformBuffer : uniformBuffers) {
-    uniformBuffer = m_context.createBuffer(
-        bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_AUTO);
+  VkDeviceSize bufferSize = sizeof(Vulkan::UniformBufferObject);
+  for (int i = 0; i < Vulkan::MAX_FRAMES_IN_FLIGHT; i++) {
+    m_uniformBuffers.emplace_back(m_context.getAllocator(), bufferSize,
+                                  VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                  VMA_MEMORY_USAGE_AUTO);
   }
 }
 
 void Renderer::updateUniformBuffers(uint32_t currentImage) {
-  UniformBufferObject ubo{};
-  SwapChainInfo swapChainInfo = m_context.getSwapChainInfo();
+  Vulkan::UniformBufferObject ubo{};
+  Vulkan::SwapChainInfo swapChainInfo = m_context.getSwapChainInfo();
   ubo.view =
       glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
                   glm::vec3(0.0f, 0.0f, 1.0f));
@@ -87,14 +73,8 @@ void Renderer::updateUniformBuffers(uint32_t currentImage) {
                                         (float)swapChainInfo.extent.height,
                                     0.1f, 10.0f);
 
-  memcpy(uniformBuffers[currentImage].info.pMappedData, &ubo,
-         sizeof(UniformBufferObject));
-}
-
-void Renderer::destroyUniformBuffers() {
-  for (auto &uniformBuffer : uniformBuffers) {
-    m_context.destroyBuffer(uniformBuffer);
-  }
+  m_uniformBuffers[currentImage].copyDataToBuffer(
+      &ubo, sizeof(Vulkan::UniformBufferObject));
 }
 
 void Renderer::drawFrame() {
@@ -103,7 +83,7 @@ void Renderer::drawFrame() {
   if (imageIntex < 0) {
     return;
   }
-  updateUniformBuffers(currentFrame);
+  // updateUniformBuffers(currentFrame);
   vkResetCommandBuffer(m_context.getCommandBuffers()[currentFrame], 0);
   recordCommandBuffer(m_context.getCommandBuffers()[currentFrame], imageIntex);
   m_context.endFrame(imageIntex);
@@ -292,7 +272,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer,
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                     m_graphicsPipeline);
 
-  VkBuffer vertexBuffers[] = {m_vertexBuffer};
+  VkBuffer vertexBuffers[] = {m_vertexBuffer->getBuffer()};
   VkDeviceSize offsets[] = {0};
   vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
@@ -336,15 +316,13 @@ VkShaderModule Renderer::createShaderModule(std::vector<char> &shaderCode) {
 
 Renderer::~Renderer() {
   m_context.waitForIdle();
-  for (AllocatedBuffer buffer : uniformBuffers) {
-    m_context.destroyBuffer(buffer);
-  }
+  // for (AllocatedBuffer buffer : uniformBuffers) {
+  //   m_context.destroyBuffer(buffer);
+  // }
   vkDestroyDescriptorSetLayout(m_context.getDevice(), m_descriptorSetLayout,
                                nullptr);
-  vmaDestroyBuffer(m_context.getAllocator(), m_vertexBuffer,
-                   m_vertexAllocation);
   vkDestroyPipeline(m_context.getDevice(), m_graphicsPipeline, nullptr);
   vkDestroyPipelineLayout(m_context.getDevice(), m_pipelineLayout, nullptr);
 }
 
-} // namespace Renderer
+} // namespace Aether::Renderer

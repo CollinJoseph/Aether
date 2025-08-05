@@ -1,5 +1,5 @@
 #pragma once
 
 namespace Aether::ECS::Components {
-struct Camera {}
+struct Camera {};
 } // namespace Aether::ECS::Components

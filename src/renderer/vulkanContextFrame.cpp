@@ -1,7 +1,6 @@
 #include "vulkanContext.hpp"
 
-namespace Renderer {
-
+namespace Aether::Renderer::Vulkan {
 int64_t VulkanContext::beginFrame() {
   vkWaitForFences(m_device, 1, &m_inFlightFences[m_currentFrame], VK_TRUE,
                   UINT64_MAX);
@@ -68,4 +67,4 @@ void VulkanContext::endFrame(uint32_t imageIndex) {
 }
 
 uint32_t VulkanContext::getCurrentFrame() const { return m_currentFrame; }
-} // namespace Renderer
+} // namespace Aether::Renderer::Vulkan

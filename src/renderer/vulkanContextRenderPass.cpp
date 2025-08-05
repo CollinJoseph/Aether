@@ -1,6 +1,6 @@
 #include "vulkanContext.hpp"
 
-namespace Renderer {
+namespace Aether::Renderer::Vulkan {
 void VulkanContext::createRenderPass() {
   VkAttachmentDescription colorAttachment{};
   colorAttachment.format = m_swapchainImageFormat;
@@ -55,4 +55,4 @@ void VulkanContext::destroyRenderPass() {
   vkDestroyRenderPass(m_device, m_renderPass, nullptr);
 }
 
-} // namespace Renderer
+} // namespace Aether::Renderer::Vulkan

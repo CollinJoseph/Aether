@@ -2,7 +2,7 @@
 #include "vmaUsage.hpp"
 #include <glm/glm.hpp>
 
-namespace Renderer {
+namespace Aether::Renderer::Vulkan {
 struct QueueFamilyIndices {
   std::optional<uint32_t> graphicsFamily;
   std::optional<uint32_t> presentFamily;
@@ -44,4 +44,4 @@ struct AllocatedBuffer {
   VmaAllocation allocation;
   VmaAllocationInfo info;
 };
-} // namespace Renderer
+} // namespace Aether::Renderer::Vulkan

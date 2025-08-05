@@ -1,8 +1,8 @@
 #include "vulkanContext.hpp"
 
-namespace Renderer {
+namespace Aether::Renderer::Vulkan {
 
-VulkanContext::VulkanContext(Engine::Window &window) : m_window(window) {
+VulkanContext::VulkanContext(Window &window) : m_window(window) {
   createInstance();
   createSurface();
   pickPhysicalDevice();
@@ -15,7 +15,6 @@ VulkanContext::VulkanContext(Engine::Window &window) : m_window(window) {
   createCommandPool();
   createCommandBuffers();
   createSyncObjects();
-  createUploadContext();
 }
 
 void VulkanContext::createInstance() {
@@ -215,6 +214,10 @@ const std::vector<VkCommandBuffer> &VulkanContext::getCommandBuffers() const {
   return m_commandBuffers;
 }
 
+VkCommandPool VulkanContext::getCommandPool() const { return m_commandPool; }
+
+VkQueue VulkanContext::getGraphicsQueue() const { return m_graphicsQueue; }
+
 void VulkanContext::createSyncObjects() {
   m_imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
   m_renderFinishedSemaphores.resize(m_swapchainImages.size());
@@ -279,66 +282,8 @@ void VulkanContext::createVMA() {
 
 VmaAllocator VulkanContext::getAllocator() const { return m_allocator; }
 
-void VulkanContext::createUploadContext() {
-  VkCommandBufferAllocateInfo allocInfo{};
-  allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-  allocInfo.commandPool = m_commandPool;
-  allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  allocInfo.commandBufferCount = 1;
-
-  if (vkAllocateCommandBuffers(m_device, &allocInfo,
-                               &m_uploadContext.commandBuffer) != VK_SUCCESS) {
-    throw std::runtime_error("failed to allocate upload command buffer!");
-  }
-
-  VkFenceCreateInfo fenceInfo{};
-  fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-
-  if (vkCreateFence(m_device, &fenceInfo, nullptr, &m_uploadContext.fence)) {
-    throw std::runtime_error("failed to create upload fence!");
-  }
-};
-
-void VulkanContext::destroyUploadContext() {
-  vkDestroyFence(m_device, m_uploadContext.fence, nullptr);
-}
-
-void VulkanContext::copyBuffersToGPU(
-    const std::vector<CopyBufferInfo> &bufferInfos) {
-  VkCommandBufferBeginInfo beginInfo{};
-  beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-  beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-  vkBeginCommandBuffer(m_uploadContext.commandBuffer, &beginInfo);
-
-  for (auto bufferInfo : bufferInfos) {
-    VkBuffer srcBuffer = bufferInfo.srcBuffer;
-    VkBuffer dstBuffer = bufferInfo.dstBuffer;
-    VkDeviceSize size = bufferInfo.size;
-
-    VkBufferCopy copyRegion{};
-    copyRegion.srcOffset = 0;
-    copyRegion.dstOffset = 0;
-    copyRegion.size = size;
-    vkCmdCopyBuffer(m_uploadContext.commandBuffer, srcBuffer, dstBuffer, 1,
-                    &copyRegion);
-  }
-  vkEndCommandBuffer(m_uploadContext.commandBuffer);
-  VkSubmitInfo submitInfo{};
-  submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submitInfo.commandBufferCount = 1;
-  submitInfo.pCommandBuffers = &m_uploadContext.commandBuffer;
-
-  vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_uploadContext.fence);
-  vkWaitForFences(m_device, 1, &m_uploadContext.fence, VK_TRUE, UINT64_MAX);
-  vkResetCommandBuffer(m_uploadContext.commandBuffer, 0);
-
-  vkResetFences(m_device, 1, &m_uploadContext.fence);
-}
-
 VulkanContext::~VulkanContext() {
   destroyRenderPass();
-  destroyUploadContext();
   destroySyncObjects();
   destroySwapChain();
 
@@ -350,4 +295,4 @@ VulkanContext::~VulkanContext() {
   vkDestroyInstance(m_instance, nullptr);
 }
 
-} // namespace Renderer
+} // namespace Aether::Renderer::Vulkan

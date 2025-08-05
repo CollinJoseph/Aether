@@ -4,7 +4,7 @@
 #include "ecs/systems/transformSystem.hpp"
 #include "renderer/renderer.hpp"
 
-namespace Engine {
+namespace Aether {
 
 Application::Application()
     : m_window(800, 600), m_renderer(m_window), m_renderSystem(m_renderer) {
@@ -37,4 +37,4 @@ void Application::testing() {
 void Application::cleanup() { m_window.close(); }
 
 Application::~Application() = default;
-} // namespace Engine
+} // namespace Aether

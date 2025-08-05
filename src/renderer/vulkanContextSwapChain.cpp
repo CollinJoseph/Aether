@@ -1,6 +1,7 @@
 #include "vulkanContext.hpp"
 
-namespace Renderer {
+namespace Aether::Renderer::Vulkan {
+
 void VulkanContext::createSwapChain() {
   SwapChainSupportDetails swapChainSupport =
       querySwapChainSupport(m_physicalDevice);
@@ -209,4 +210,4 @@ void VulkanContext::destroySwapChain() {
   }
   vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
 }
-} // namespace Renderer
+} // namespace Aether::Renderer::Vulkan

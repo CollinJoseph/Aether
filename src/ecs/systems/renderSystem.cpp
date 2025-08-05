@@ -5,7 +5,7 @@
 namespace Aether {
 
 void RenderSystem::update(entt::registry &reg) {
-  const auto view = reg.view<Engine::ECS::Components::Transform2D>();
+  const auto view = reg.view<ECS::Components::Transform2D>();
   view.each([&](auto &transform) {
     m_quadTransforms.push_back(transform.transform);
   });
