@@ -26,6 +26,42 @@ VulkanBuffer::VulkanBuffer(VmaAllocator allocator, const VkDeviceSize size,
   }
 }
 
+VulkanBuffer::VulkanBuffer(VulkanBuffer &&other) noexcept
+    : m_allocator(other.m_allocator), // copy: allocators are typically okay
+      m_buffer(other.m_buffer),       // take ownership
+      m_allocation(other.m_allocation),
+      m_allocationInfo(other.m_allocationInfo),
+      m_isPersistentlyMapped(other.m_isPersistentlyMapped) {
+  // Reset 'other' so its destructor doesn't destroy your resource
+  other.m_buffer = VK_NULL_HANDLE;
+  other.m_allocation = VK_NULL_HANDLE;
+  other.m_isPersistentlyMapped = false;
+  std::memset(&other.m_allocationInfo, 0, sizeof(VmaAllocationInfo));
+}
+
+VulkanBuffer &VulkanBuffer::operator=(VulkanBuffer &&other) noexcept {
+  if (this != &other) {
+    // 1. Release any resource currently held by *this to avoid leaks
+    if (m_buffer != VK_NULL_HANDLE && m_allocation != VK_NULL_HANDLE) {
+      vmaDestroyBuffer(m_allocator, m_buffer, m_allocation);
+    }
+
+    // 2. Transfer ownership of resources from other to *this
+    m_allocator = other.m_allocator;
+    m_buffer = other.m_buffer;
+    m_allocation = other.m_allocation;
+    m_allocationInfo = other.m_allocationInfo;
+    m_isPersistentlyMapped = other.m_isPersistentlyMapped;
+
+    // 3. Leave other in a valid empty state
+    other.m_buffer = VK_NULL_HANDLE;
+    other.m_allocation = VK_NULL_HANDLE;
+    other.m_isPersistentlyMapped = false;
+    std::memset(&other.m_allocationInfo, 0, sizeof(VmaAllocationInfo));
+  }
+  return *this;
+}
+
 VulkanBuffer::~VulkanBuffer() {
   vmaDestroyBuffer(m_allocator, m_buffer, m_allocation);
 }

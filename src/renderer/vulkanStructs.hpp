@@ -23,17 +23,6 @@ struct SwapChainInfo {
   VkExtent2D extent;
 };
 
-struct UploadContext {
-  VkFence fence;
-  VkCommandBuffer commandBuffer;
-};
-
-struct CopyBufferInfo {
-  VkBuffer srcBuffer;
-  VkBuffer dstBuffer;
-  VkDeviceSize size;
-};
-
 struct UniformBufferObject {
   glm::mat4 projection;
   glm::mat4 view;

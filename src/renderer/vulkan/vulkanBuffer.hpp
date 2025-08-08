@@ -9,6 +9,10 @@ public:
   VulkanBuffer(VmaAllocator allocator, VkDeviceSize size,
                VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage,
                VmaAllocationCreateFlags createFlags = 0);
+  VulkanBuffer(const VulkanBuffer &) = delete; // prevent accidental copying
+  VulkanBuffer &operator=(const VulkanBuffer &) = delete;
+  VulkanBuffer(VulkanBuffer &&other) noexcept; // move constructor
+  VulkanBuffer &operator=(VulkanBuffer &&other) noexcept;
   ~VulkanBuffer();
   void copyDataToBuffer(const void *src, size_t size) const;
   VkBuffer getBuffer() const;

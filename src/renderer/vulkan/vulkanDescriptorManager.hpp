@@ -5,11 +5,21 @@ namespace Aether::Renderer::Vulkan {
 
 class VulkanDescriptorManager {
 public:
-  explicit VulkanDescriptorManager(::Renderer::VulkanContext &m_vulkan_context)
-      : m_vulkanContext(m_vulkan_context) {}
+  VulkanDescriptorManager(VulkanContext &context);
+  ~VulkanDescriptorManager();
+  const VkDescriptorSetLayout *getDescriptorSetLayout() const;
+  const std::vector<VkDescriptorSet> &getDescriptorSets() const;
 
 private:
-  ::Renderer::VulkanContext &m_vulkanContext;
+  VulkanContext &m_context;
+  VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
+  VkDescriptorSetLayout m_descriptorSetLayout = VK_NULL_HANDLE;
+  std::vector<VkDescriptorSet> m_descriptorSets;
+
+private:
+  void createDescriptorSetLayout();
+  void createDescriptorPool();
+  void createDescriptorSets();
 };
 
 } // namespace Aether::Renderer::Vulkan

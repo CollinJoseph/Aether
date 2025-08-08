@@ -261,13 +261,6 @@ void VulkanContext::destroySyncObjects() {
   }
 }
 
-void VulkanContext::createDescriptorPool() {
-  VkDescriptorPoolSize poolSize{};
-  poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-}
-
-void VulkanContext::destroyDescriptorPool() {}
-
 void VulkanContext::createVMA() {
   VmaAllocatorCreateInfo allocatorInfo{};
   allocatorInfo.flags = 0;

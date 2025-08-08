@@ -42,6 +42,7 @@ private:
   // Info: Command pools are externally synchronized, meaning that a command
   //  pool must not be used concurrently in multiple threads.
   VkCommandPool m_commandPool = VK_NULL_HANDLE;
+  VkDescriptorSetLayout m_descriptorSetLayout = VK_NULL_HANDLE;
   VkRenderPass m_renderPass;
   VmaAllocator m_allocator;
   std::vector<VkFramebuffer> m_swapChainFramebuffers;
@@ -52,7 +53,6 @@ private:
   std::vector<VkSemaphore> m_renderFinishedSemaphores;
   std::vector<VkFence> m_inFlightFences;
   uint32_t m_currentFrame = 0;
-  UploadContext m_uploadContext;
 
 private:
   void createInstance();
@@ -75,13 +75,9 @@ private:
   void createCommandBuffers();
   void createSyncObjects();
   void destroySyncObjects();
-  void createDescriptorPool();
-  void destroyDescriptorPool();
   void createVMA();
   void destroySwapChain();
   void createRenderPass();
   void recreateSwapChain();
-  void createUploadContext();
-  void destroyUploadContext();
 };
 } // namespace Aether::Renderer::Vulkan

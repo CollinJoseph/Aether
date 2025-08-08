@@ -3,32 +3,16 @@
 #include "vulkan/vulkanBuffer.hpp"
 #include "vulkan/vulkanHelpers.hpp"
 
+#include <glm/gtx/string_cast.hpp>
 #include <glm/gtx/transform.hpp>
 
 namespace Aether::Renderer {
-Renderer::Renderer(Window &window) : m_context(window) {
-  createDescriptorSetLayout();
+Renderer::Renderer(Window &window)
+    : m_context(window), m_descriptorManager(m_context) {
   createVertexBuffer();
-  // createUniformBuffers();
+  createUniformBuffers();
+  bindUniformBuffersToDescriptorSets();
   createGraphicsPipeline();
-}
-
-void Renderer::createDescriptorSetLayout() {
-  VkDescriptorSetLayoutBinding bindings{};
-  bindings.binding = 0;
-  bindings.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-  bindings.descriptorCount = 1;
-  bindings.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-  bindings.pImmutableSamplers = nullptr;
-
-  VkDescriptorSetLayoutCreateInfo layoutInfo{};
-  layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  layoutInfo.bindingCount = 1;
-  layoutInfo.pBindings = &bindings;
-  if (vkCreateDescriptorSetLayout(m_context.getDevice(), &layoutInfo, nullptr,
-                                  &m_descriptorSetLayout)) {
-    throw std::runtime_error("failed to create descriptor set layout!");
-  };
 }
 
 void Renderer::createVertexBuffer() {
@@ -56,22 +40,54 @@ void Renderer::createVertexBuffer() {
 void Renderer::createUniformBuffers() {
   VkDeviceSize bufferSize = sizeof(Vulkan::UniformBufferObject);
   for (int i = 0; i < Vulkan::MAX_FRAMES_IN_FLIGHT; i++) {
-    m_uniformBuffers.emplace_back(m_context.getAllocator(), bufferSize,
-                                  VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                                  VMA_MEMORY_USAGE_AUTO);
+    m_uniformBuffers.emplace_back(
+        m_context.getAllocator(), bufferSize,
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_AUTO,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+            VMA_ALLOCATION_CREATE_MAPPED_BIT);
+  }
+}
+
+void Renderer::bindUniformBuffersToDescriptorSets() const {
+  const std::vector<VkDescriptorSet> descriptorSets =
+      m_descriptorManager.getDescriptorSets();
+  for (size_t i = 0; i < Vulkan::MAX_FRAMES_IN_FLIGHT; i++) {
+    VkDescriptorBufferInfo bufferInfo{};
+    bufferInfo.buffer = m_uniformBuffers[i].getBuffer();
+    bufferInfo.offset = 0;
+    bufferInfo.range = VK_WHOLE_SIZE;
+
+    VkWriteDescriptorSet descriptorWrite{};
+    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrite.dstSet = descriptorSets[i];
+    descriptorWrite.dstBinding = 0;
+    descriptorWrite.dstArrayElement = 0;
+    descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptorWrite.descriptorCount = 1;
+    descriptorWrite.pBufferInfo = &bufferInfo;
+
+    vkUpdateDescriptorSets(m_context.getDevice(), 1, &descriptorWrite, 0,
+                           nullptr);
   }
 }
 
 void Renderer::updateUniformBuffers(uint32_t currentImage) {
   Vulkan::UniformBufferObject ubo{};
   Vulkan::SwapChainInfo swapChainInfo = m_context.getSwapChainInfo();
-  ubo.view =
-      glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
-                  glm::vec3(0.0f, 0.0f, 1.0f));
-  ubo.projection = glm::perspective(glm::radians(45.0f),
-                                    (float)swapChainInfo.extent.width /
-                                        (float)swapChainInfo.extent.height,
-                                    0.1f, 10.0f);
+  // ubo.view = glm::lookAt(glm::vec3(0.0f, 0.0f, 3.0f), // Camera position
+  // (eye)
+  //                        glm::vec3(0.0f, 0.0f, 0.0f), // Look at (center)
+  //                        glm::vec3(0.0f, 1.0f, 0.0f)  // Up vector (Y up)
+  // );proj
+  // ubo.view =
+  //     glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
+  //                 glm::vec3(0.0f, 0.0f, 1.0f));
+  ubo.view = glm::mat4(1.0f);
+
+  ubo.projection = glm::ortho(
+      0.0f, static_cast<float>(swapChainInfo.extent.width),
+      static_cast<float>(swapChainInfo.extent.height), 0.f, 0.0f, 1.0f);
+  ubo.projection[1][1] *= -1;
 
   m_uniformBuffers[currentImage].copyDataToBuffer(
       &ubo, sizeof(Vulkan::UniformBufferObject));
@@ -83,7 +99,7 @@ void Renderer::drawFrame() {
   if (imageIntex < 0) {
     return;
   }
-  // updateUniformBuffers(currentFrame);
+  updateUniformBuffers(currentFrame);
   vkResetCommandBuffer(m_context.getCommandBuffers()[currentFrame], 0);
   recordCommandBuffer(m_context.getCommandBuffers()[currentFrame], imageIntex);
   m_context.endFrame(imageIntex);
@@ -160,7 +176,7 @@ void Renderer::createGraphicsPipeline() {
   rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
   rasterizer.lineWidth = 1.0f;
   rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-  rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+  rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
   rasterizer.depthBiasEnable = VK_FALSE;
 
   VkPipelineMultisampleStateCreateInfo multisampling{};
@@ -210,7 +226,7 @@ void Renderer::createGraphicsPipeline() {
   VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
   pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   pipelineLayoutInfo.setLayoutCount = 1;
-  pipelineLayoutInfo.pSetLayouts = &m_descriptorSetLayout;
+  pipelineLayoutInfo.pSetLayouts = m_descriptorManager.getDescriptorSetLayout();
 
   if (vkCreatePipelineLayout(m_context.getDevice(), &pipelineLayoutInfo,
                              nullptr, &m_pipelineLayout) != VK_SUCCESS) {
@@ -292,6 +308,13 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer,
   scissor.extent = swapChainExtent;
   vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
+  std::vector<VkDescriptorSet> descriptorSets =
+      m_descriptorManager.getDescriptorSets();
+
+  vkCmdBindDescriptorSets(
+      commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, 1,
+      &descriptorSets[m_context.getCurrentFrame()], 0, nullptr);
+
   vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
 
   vkCmdEndRenderPass(commandBuffer);
@@ -319,8 +342,6 @@ Renderer::~Renderer() {
   // for (AllocatedBuffer buffer : uniformBuffers) {
   //   m_context.destroyBuffer(buffer);
   // }
-  vkDestroyDescriptorSetLayout(m_context.getDevice(), m_descriptorSetLayout,
-                               nullptr);
   vkDestroyPipeline(m_context.getDevice(), m_graphicsPipeline, nullptr);
   vkDestroyPipelineLayout(m_context.getDevice(), m_pipelineLayout, nullptr);
 }

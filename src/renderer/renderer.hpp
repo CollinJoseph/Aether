@@ -1,6 +1,7 @@
 #pragma once
 #include "pch/pch.hpp"
 #include "vulkan/vulkanBuffer.hpp"
+#include "vulkan/vulkanDescriptorManager.hpp"
 #include "vulkanContext.hpp"
 #include "window.hpp"
 
@@ -41,34 +42,39 @@ public:
   ~Renderer();
   void drawFrame();
   const std::vector<Vertex> vertices = {
-      {{0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}}, // Bottom-left
-      {{1.5f, 0.5f}, {0.0f, 1.0f, 0.0f}}, // Bottom-right
-      {{1.5f, 1.5f}, {0.0f, 0.0f, 1.0f}}, // Top-right
+      {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}}, {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+      {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
 
-      {{1.5f, 1.5f}, {0.0f, 0.0f, 1.0f}}, // Top-right
-      {{0.5f, 1.5f}, {1.0f, 1.0f, 0.0f}}, // Top-left
-      {{0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}}, // Bottom-left
+      {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},   {{-0.5f, 0.5f}, {1.0f, 1.0f, 0.0f}},
+      {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
   };
 
 private:
   Vulkan::VulkanContext m_context;
-  VkDescriptorSetLayout m_descriptorSetLayout;
-  VkPipelineLayout m_pipelineLayout;
-  VkPipeline m_graphicsPipeline;
+  Vulkan::VulkanDescriptorManager m_descriptorManager;
+  VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
+  VkPipeline m_graphicsPipeline = VK_NULL_HANDLE;
 
   const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
   std::unique_ptr<Vulkan::VulkanBuffer> m_vertexBuffer;
   std::vector<Vulkan::VulkanBuffer> m_uniformBuffers;
 
+  // TODO: USE STAGING BUFFER TO IMPROVE PERFORMANCE LATER
+  Vulkan::VulkanBuffer m_vertexSSBO{
+      m_context.getAllocator(), 1024, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+      VMA_MEMORY_USAGE_AUTO,
+      VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+          VMA_ALLOCATION_CREATE_MAPPED_BIT};
+
 private:
   static std::vector<char> readFile(const std::string &filename);
+
   VkShaderModule createShaderModule(std::vector<char> &shaderCode);
   void createGraphicsPipeline();
   void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
-  void createDescriptorSetLayout();
   void createVertexBuffer();
   void createUniformBuffers();
+  void bindUniformBuffersToDescriptorSets() const;
   void updateUniformBuffers(uint32_t currentImage);
-  void destroyUniformBuffers();
 };
 } // namespace Aether::Renderer
