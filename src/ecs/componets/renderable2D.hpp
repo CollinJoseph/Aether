@@ -1,8 +1,5 @@
-//
-// Created by collinj on 08/08/25.
-//
+#pragma once
 
-#ifndef RENDERABLE2D_HPP
-#define RENDERABLE2D_HPP
-
-#endif //RENDERABLE2D_HPP
+namespace Aether::ECS::Components {
+struct Renderable2D {};
+} // namespace Aether::ECS::Components

@@ -11,8 +11,12 @@ Renderer::Renderer(Window &window)
     : m_context(window), m_descriptorManager(m_context) {
   createVertexBuffer();
   createUniformBuffers();
-  bindUniformBuffersToDescriptorSets();
   createGraphicsPipeline();
+
+  createVertexSSBOs();
+  createRenderables();
+
+  bindUniformBuffersToDescriptorSets();
 }
 
 void Renderer::createVertexBuffer() {
@@ -52,21 +56,41 @@ void Renderer::bindUniformBuffersToDescriptorSets() const {
   const std::vector<VkDescriptorSet> descriptorSets =
       m_descriptorManager.getDescriptorSets();
   for (size_t i = 0; i < Vulkan::MAX_FRAMES_IN_FLIGHT; i++) {
-    VkDescriptorBufferInfo bufferInfo{};
-    bufferInfo.buffer = m_uniformBuffers[i].getBuffer();
-    bufferInfo.offset = 0;
-    bufferInfo.range = VK_WHOLE_SIZE;
 
-    VkWriteDescriptorSet descriptorWrite{};
-    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrite.dstSet = descriptorSets[i];
-    descriptorWrite.dstBinding = 0;
-    descriptorWrite.dstArrayElement = 0;
-    descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptorWrite.descriptorCount = 1;
-    descriptorWrite.pBufferInfo = &bufferInfo;
+    VkDescriptorBufferInfo viewProjectMatrixUBO{
+        .buffer = m_uniformBuffers[i].getBuffer(),
+        .offset = 0,
+        .range = VK_WHOLE_SIZE};
 
-    vkUpdateDescriptorSets(m_context.getDevice(), 1, &descriptorWrite, 0,
+    VkDescriptorBufferInfo vertexSSBO{.buffer = m_vertexSSBO[i].getBuffer(),
+                                      .offset = 0,
+                                      .range = VK_WHOLE_SIZE};
+
+    VkWriteDescriptorSet viewProjectionUBOWrite{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = descriptorSets[i],
+        .dstBinding = 0,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .pBufferInfo = &viewProjectMatrixUBO,
+    };
+
+    VkWriteDescriptorSet vertexSSBOWrite{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = descriptorSets[i],
+        .dstBinding = 1,
+        .dstArrayElement = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .pBufferInfo = &vertexSSBO,
+    };
+
+    VkWriteDescriptorSet descriptorWrites[] = {
+        viewProjectionUBOWrite,
+        vertexSSBOWrite,
+    };
+    vkUpdateDescriptorSets(m_context.getDevice(), 2, descriptorWrites, 0,
                            nullptr);
   }
 }
@@ -84,13 +108,20 @@ void Renderer::updateUniformBuffers(uint32_t currentImage) {
   //                 glm::vec3(0.0f, 0.0f, 1.0f));
   ubo.view = glm::mat4(1.0f);
 
-  ubo.projection = glm::ortho(
-      0.0f, static_cast<float>(swapChainInfo.extent.width),
-      static_cast<float>(swapChainInfo.extent.height), 0.f, 0.0f, 1.0f);
-  ubo.projection[1][1] *= -1;
+  ubo.projection = glm::orthoLH_ZO(
+      0.0f, static_cast<float>(swapChainInfo.extent.width), 0.0f,
+      static_cast<float>(swapChainInfo.extent.height), 0.0f, 1.0f);
+  // ubo.projection[1][1] *= -1;
+  // std::cout << "debug\n";
+  // std::cout << glm::to_string(ubo.projection) << "\n";
+  // std::cout << glm::to_string(ubo.view) << "\n";
+  // std::cout << glm::to_string(m_renderableMatrix[0]) << "\n";
 
   m_uniformBuffers[currentImage].copyDataToBuffer(
       &ubo, sizeof(Vulkan::UniformBufferObject));
+
+  m_vertexSSBO[currentImage].copyDataToBuffer(&m_renderableMatrix,
+                                              sizeof(glm::mat4) * 10);
 }
 
 void Renderer::drawFrame() {
@@ -176,13 +207,12 @@ void Renderer::createGraphicsPipeline() {
   rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
   rasterizer.lineWidth = 1.0f;
   rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-  rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
   rasterizer.depthBiasEnable = VK_FALSE;
 
   VkPipelineMultisampleStateCreateInfo multisampling{};
   multisampling.sType =
       VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-  multisampling.sampleShadingEnable = VK_FALSE;
   multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
   // TODO: Go back and read
@@ -294,28 +324,26 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer,
 
   auto swapChainExtent = m_context.getSwapChainInfo().extent;
 
-  VkViewport viewport{};
-  viewport.x = 0.0f;
-  viewport.y = 0.0f;
-  viewport.width = static_cast<float>(swapChainExtent.width);
-  viewport.height = static_cast<float>(swapChainExtent.height);
-  viewport.minDepth = 0.0;
-  viewport.maxDepth = 1.0f;
+  const VkViewport viewport{.x = 0.0f,
+                            .y = 0.0f,
+                            .width = static_cast<float>(swapChainExtent.width),
+                            .height =
+                                static_cast<float>(swapChainExtent.height),
+                            .minDepth = 0.0f,
+                            .maxDepth = 1.0f};
   vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
-  VkRect2D scissor{};
-  scissor.offset = {0, 0};
-  scissor.extent = swapChainExtent;
+  const VkRect2D scissor{.offset = {0, 0}, .extent = swapChainExtent};
   vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-  std::vector<VkDescriptorSet> descriptorSets =
+  const std::vector<VkDescriptorSet> descriptorSets =
       m_descriptorManager.getDescriptorSets();
 
   vkCmdBindDescriptorSets(
       commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, 1,
       &descriptorSets[m_context.getCurrentFrame()], 0, nullptr);
 
-  vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+  vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 10, 0, 0);
 
   vkCmdEndRenderPass(commandBuffer);
 
@@ -345,5 +373,31 @@ Renderer::~Renderer() {
   vkDestroyPipeline(m_context.getDevice(), m_graphicsPipeline, nullptr);
   vkDestroyPipelineLayout(m_context.getDevice(), m_pipelineLayout, nullptr);
 }
+
+void Renderer::createVertexSSBOs() {
+  for (int i = 0; i < Vulkan::MAX_FRAMES_IN_FLIGHT; i++) {
+    m_vertexSSBO.emplace_back(
+        m_context.getAllocator(), 1024, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VMA_MEMORY_USAGE_AUTO,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+            VMA_ALLOCATION_CREATE_MAPPED_BIT);
+  }
+}
+
+void Renderer::createRenderables() {
+  for (auto &i : m_renderableMatrix) {
+    glm::mat4 transform = glm::mat4(1.0f);
+    transform = glm::translate(transform,
+                               glm::vec3(random() % 2000, random() % 1000, 0));
+    transform =
+        glm::rotate(transform, glm::radians(0.0f), glm::vec3(0.f, 0.f, 1.f));
+    transform = glm::scale(transform, glm::vec3(100.f, 100.f, 1.f));
+    i = transform;
+  }
+}
+
+// void Renderer::updateRenderables() const {
+//   m_vertexSSBO.copyDataToBuffer(&renderable, sizeof(glm::mat4) * 10);
+// }
 
 } // namespace Aether::Renderer

@@ -40,6 +40,9 @@ class Renderer {
 public:
   explicit Renderer(Window &window);
   ~Renderer();
+  void createVertexSSBOs();
+  void createRenderables();
+  void updateRenderables() const;
   void drawFrame();
   const std::vector<Vertex> vertices = {
       {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}}, {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
@@ -60,11 +63,8 @@ private:
   std::vector<Vulkan::VulkanBuffer> m_uniformBuffers;
 
   // TODO: USE STAGING BUFFER TO IMPROVE PERFORMANCE LATER
-  Vulkan::VulkanBuffer m_vertexSSBO{
-      m_context.getAllocator(), 1024, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-      VMA_MEMORY_USAGE_AUTO,
-      VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-          VMA_ALLOCATION_CREATE_MAPPED_BIT};
+  glm::mat4 m_renderableMatrix[10];
+  std::vector<Vulkan::VulkanBuffer> m_vertexSSBO;
 
 private:
   static std::vector<char> readFile(const std::string &filename);

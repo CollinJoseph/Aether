@@ -25,7 +25,7 @@ VulkanDescriptorManager::getDescriptorSets() const {
 }
 
 void VulkanDescriptorManager::createDescriptorSetLayout() {
-  VkDescriptorSetLayoutBinding uboLayoutBinding{
+  VkDescriptorSetLayoutBinding viewProjectMatrixLayoutBinding{
       .binding = 0,
       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
       .descriptorCount = 1,
@@ -33,10 +33,20 @@ void VulkanDescriptorManager::createDescriptorSetLayout() {
       .pImmutableSamplers = nullptr,
   };
 
+  VkDescriptorSetLayoutBinding vertexSSBOLayoutBinding{
+      .binding = 1,
+      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+      .descriptorCount = 1,
+      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+      .pImmutableSamplers = nullptr};
+
+  VkDescriptorSetLayoutBinding layoutBinding[2] = {
+      viewProjectMatrixLayoutBinding, vertexSSBOLayoutBinding};
+
   VkDescriptorSetLayoutCreateInfo uboLayoutCreateInfo{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = 1,
-      .pBindings = &uboLayoutBinding,
+      .bindingCount = 2,
+      .pBindings = layoutBinding,
   };
 
   if (vkCreateDescriptorSetLayout(m_context.getDevice(), &uboLayoutCreateInfo,
@@ -47,14 +57,17 @@ void VulkanDescriptorManager::createDescriptorSetLayout() {
 }
 
 void VulkanDescriptorManager::createDescriptorPool() {
-  VkDescriptorPoolSize poolSize = {
-      .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-      .descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT)};
+  VkDescriptorPoolSize poolSize[] = {
+      {.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+       .descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT)},
+      {.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+       .descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT)},
+  };
   VkDescriptorPoolCreateInfo poolInfo = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
       .maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
-      .poolSizeCount = 1,
-      .pPoolSizes = &poolSize,
+      .poolSizeCount = 2,
+      .pPoolSizes = poolSize,
   };
   if (vkCreateDescriptorPool(m_context.getDevice(), &poolInfo, nullptr,
                              &m_descriptorPool) != VK_SUCCESS) {

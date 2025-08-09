@@ -10,6 +10,7 @@ void VulkanContext::createSwapChain() {
       chooseSwapSurfaceFormat(swapChainSupport.formats);
   VkPresentModeKHR presentMode =
       chooseSwapPresentMode(swapChainSupport.presentModes);
+  // presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR
   VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
   uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
