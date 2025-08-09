@@ -1,4 +1,5 @@
 #pragma once
+#include "config/config.hpp"
 #include "pch/pch.hpp"
 #include "vulkan/vulkanBuffer.hpp"
 #include "vulkan/vulkanDescriptorManager.hpp"
@@ -40,10 +41,23 @@ class Renderer {
 public:
   explicit Renderer(Window &window);
   ~Renderer();
-  void createVertexSSBOs();
-  void createRenderables();
-  void updateRenderables() const;
-  void drawFrame();
+  void write2dTransformsToBuffer(const std::vector<glm::mat4> &transforms);
+  void render();
+
+private:
+  Vulkan::VulkanContext m_context;
+  Vulkan::VulkanDescriptorManager m_descriptorManager;
+  VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
+  VkPipeline m_graphicsPipeline = VK_NULL_HANDLE;
+
+  std::unique_ptr<Vulkan::VulkanBuffer> m_vertexBuffer;
+  std::vector<Vulkan::VulkanBuffer> m_uniformBuffers;
+
+  uint32_t m_renderObjectsCount = 0;
+  std::unique_ptr<Vulkan::VulkanBuffer> m_transform2dStagingBuffer;
+  bool m_transform2dChanged[Config::MAX_FRAMES_IN_FLIGHT] = {true};
+  std::vector<Vulkan::VulkanBuffer> m_transform2dSSBO;
+
   const std::vector<Vertex> vertices = {
       {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}}, {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
       {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
@@ -53,28 +67,16 @@ public:
   };
 
 private:
-  Vulkan::VulkanContext m_context;
-  Vulkan::VulkanDescriptorManager m_descriptorManager;
-  VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
-  VkPipeline m_graphicsPipeline = VK_NULL_HANDLE;
-
-  const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0};
-  std::unique_ptr<Vulkan::VulkanBuffer> m_vertexBuffer;
-  std::vector<Vulkan::VulkanBuffer> m_uniformBuffers;
-
-  // TODO: USE STAGING BUFFER TO IMPROVE PERFORMANCE LATER
-  glm::mat4 m_renderableMatrix[10];
-  std::vector<Vulkan::VulkanBuffer> m_vertexSSBO;
-
-private:
   static std::vector<char> readFile(const std::string &filename);
 
   VkShaderModule createShaderModule(std::vector<char> &shaderCode);
   void createGraphicsPipeline();
   void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
-  void createVertexBuffer();
-  void createUniformBuffers();
-  void bindUniformBuffersToDescriptorSets() const;
-  void updateUniformBuffers(uint32_t currentImage);
+
+  void createBuffers();
+  void writeVertexDataToVertexBuffer();
+  void bindBuffersToDescriptorSets() const;
+  void updateUniformBuffers(uint32_t currentFrame) const;
+  void updateTransform2dBuffers(uint32_t currentFrame);
 };
 } // namespace Aether::Renderer

@@ -6,28 +6,32 @@
 
 namespace Aether {
 
-void RenderSystem::update(entt::registry &reg) {
-  const auto view =
-      reg.view<ECS::Components::Transform2D, ECS::Components::Renderable2D>();
-}
-
 void RenderSystem::render(entt::registry &reg) {
-  const auto view =
-      reg.view<ECS::Components::Transform2D, ECS::Components::Renderable2D>();
-  m_renderer.drawFrame();
+  if (m_2dRenderablesChanged) {
+    m_2dTransforms.clear();
+    m_2dRenderablesChanged = false;
+    std::transform(m_2dRenderables.begin(), m_2dRenderables.end(),
+                   std::back_inserter(m_2dTransforms), [&](entt::entity e) {
+                     return reg.get<ECS::Components::Transform2D>(e).transform;
+                   });
+    m_renderer.write2dTransformsToBuffer(m_2dTransforms);
+  }
+  m_renderer.render();
 }
 
 void RenderSystem::enqueueRenderable2D(entt::entity e) {
   std::cout << static_cast<uint32_t>(e) << std::endl;
-  m_renderable2Ds.push_back(e);
+  m_2dRenderables.push_back(e);
+  m_2dRenderablesChanged = true;
 }
 
 void RenderSystem::dequeueRenderable2D(entt::entity e) {
   std::cout << static_cast<uint32_t>(e) << std::endl;
-  auto it = std::find(m_renderable2Ds.begin(), m_renderable2Ds.end(), e);
-  if (it != m_renderable2Ds.end()) {
-    *it = m_renderable2Ds.back();
-    m_renderable2Ds.pop_back();
+  auto it = std::find(m_2dRenderables.begin(), m_2dRenderables.end(), e);
+  if (it != m_2dRenderables.end()) {
+    *it = m_2dRenderables.back();
+    m_2dRenderables.pop_back();
+    m_2dRenderablesChanged = true;
   }
 }
 } // namespace Aether

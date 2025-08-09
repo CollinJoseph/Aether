@@ -1,3 +1,4 @@
+#include "config/config.hpp"
 #include "vulkanContext.hpp"
 
 namespace Aether::Renderer::Vulkan {
@@ -196,7 +197,7 @@ void VulkanContext::createCommandPool() {
 }
 
 void VulkanContext::createCommandBuffers() {
-  m_commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+  m_commandBuffers.resize(Config::MAX_FRAMES_IN_FLIGHT);
 
   VkCommandBufferAllocateInfo allocInfo{};
   allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -219,9 +220,9 @@ VkCommandPool VulkanContext::getCommandPool() const { return m_commandPool; }
 VkQueue VulkanContext::getGraphicsQueue() const { return m_graphicsQueue; }
 
 void VulkanContext::createSyncObjects() {
-  m_imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+  m_imageAvailableSemaphores.resize(Config::MAX_FRAMES_IN_FLIGHT);
   m_renderFinishedSemaphores.resize(m_swapchainImages.size());
-  m_inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+  m_inFlightFences.resize(Config::MAX_FRAMES_IN_FLIGHT);
 
   VkSemaphoreCreateInfo semaphoreInfo{};
   semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -230,7 +231,7 @@ void VulkanContext::createSyncObjects() {
   fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-  for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+  for (size_t i = 0; i < Config::MAX_FRAMES_IN_FLIGHT; i++) {
     if (vkCreateSemaphore(m_device, &semaphoreInfo, nullptr,
                           &m_imageAvailableSemaphores[i]) != VK_SUCCESS ||
         vkCreateFence(m_device, &fenceInfo, nullptr, &m_inFlightFences[i]) !=
@@ -251,7 +252,7 @@ void VulkanContext::createSyncObjects() {
 }
 
 void VulkanContext::destroySyncObjects() {
-  for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+  for (size_t i = 0; i < Config::MAX_FRAMES_IN_FLIGHT; i++) {
     vkDestroySemaphore(m_device, m_imageAvailableSemaphores[i], nullptr);
     vkDestroyFence(m_device, m_inFlightFences[i], nullptr);
   }

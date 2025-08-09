@@ -1,3 +1,4 @@
+#include "config/config.hpp"
 #include "vulkanContext.hpp"
 
 namespace Aether::Renderer::Vulkan {
@@ -63,7 +64,7 @@ void VulkanContext::endFrame(uint32_t imageIndex) {
     throw std::runtime_error("failed to present swap chain image!");
   }
 
-  m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+  m_currentFrame = (m_currentFrame + 1) % Config::MAX_FRAMES_IN_FLIGHT;
 }
 
 uint32_t VulkanContext::getCurrentFrame() const { return m_currentFrame; }

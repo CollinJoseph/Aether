@@ -1,5 +1,6 @@
 #include "renderer.hpp"
 
+#include "config/config.hpp"
 #include "vulkan/vulkanBuffer.hpp"
 #include "vulkan/vulkanHelpers.hpp"
 
@@ -9,60 +10,78 @@
 namespace Aether::Renderer {
 Renderer::Renderer(Window &window)
     : m_context(window), m_descriptorManager(m_context) {
-  createVertexBuffer();
-  createUniformBuffers();
+  createBuffers();
+  writeVertexDataToVertexBuffer();
   createGraphicsPipeline();
-
-  createVertexSSBOs();
-  createRenderables();
-
-  bindUniformBuffersToDescriptorSets();
+  bindBuffersToDescriptorSets();
 }
 
-void Renderer::createVertexBuffer() {
-  const size_t bufferSize = vertices.size() * sizeof(Vertex);
+void Renderer::createBuffers() {
 
-  Vulkan::VulkanBuffer stagingBuffer(
-      m_context.getAllocator(), bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-      VMA_MEMORY_USAGE_AUTO,
-      VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
-  stagingBuffer.copyDataToBuffer(vertices.data(), bufferSize);
-
+  // Create Vertex buffer for vertex data
+  const size_t vertexBufferSize = vertices.size() * sizeof(Vertex);
   m_vertexBuffer = std::make_unique<Vulkan::VulkanBuffer>(
-      m_context.getAllocator(), bufferSize,
+      m_context.getAllocator(), vertexBufferSize,
       VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
       VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE);
 
+  // Create Uniform buffer for view projection data
+  VkDeviceSize uboBufferSize = sizeof(Vulkan::UniformBufferObject);
+  for (int i = 0; i < Config::MAX_FRAMES_IN_FLIGHT; i++) {
+    m_uniformBuffers.emplace_back(
+        m_context.getAllocator(), uboBufferSize,
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_AUTO,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+            VMA_ALLOCATION_CREATE_MAPPED_BIT);
+  }
+
+  // Create Transform staging buffer, and per frame transform SSBO
+  VkDeviceSize transformBufferSize =
+      sizeof(glm::mat4) * Config::MAX_RENDERABLES;
+  m_transform2dStagingBuffer = std::make_unique<Vulkan::VulkanBuffer>(
+      m_context.getAllocator(), transformBufferSize,
+      VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+      VMA_MEMORY_USAGE_AUTO,
+      VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+          VMA_ALLOCATION_CREATE_MAPPED_BIT);
+
+  for (int i = 0; i < Config::MAX_FRAMES_IN_FLIGHT; i++) {
+    m_transform2dSSBO.emplace_back(
+        m_context.getAllocator(), transformBufferSize,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE);
+  }
+}
+
+void Renderer::writeVertexDataToVertexBuffer() {
+  const size_t vertexBufferSize = vertices.size() * sizeof(Vertex);
+
+  Vulkan::VulkanBuffer stagingBuffer(
+      m_context.getAllocator(), vertexBufferSize,
+      VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_AUTO,
+      VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+  stagingBuffer.copyDataToBuffer(vertices.data(), vertexBufferSize);
+
   VkCommandBuffer commandBuffer =
       Vulkan::VulkanHelpers::beginSingleTimeCommands(m_context);
-  VkBufferCopy copyRegion{0, 0, bufferSize};
+  VkBufferCopy copyRegion{0, 0, vertexBufferSize};
   vkCmdCopyBuffer(commandBuffer, stagingBuffer.getBuffer(),
                   m_vertexBuffer->getBuffer(), 1, &copyRegion);
   Vulkan::VulkanHelpers::endSingleTimeCommands(m_context, commandBuffer);
 }
 
-void Renderer::createUniformBuffers() {
-  VkDeviceSize bufferSize = sizeof(Vulkan::UniformBufferObject);
-  for (int i = 0; i < Vulkan::MAX_FRAMES_IN_FLIGHT; i++) {
-    m_uniformBuffers.emplace_back(
-        m_context.getAllocator(), bufferSize,
-        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_AUTO,
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-            VMA_ALLOCATION_CREATE_MAPPED_BIT);
-  }
-}
-
-void Renderer::bindUniformBuffersToDescriptorSets() const {
+void Renderer::bindBuffersToDescriptorSets() const {
   const std::vector<VkDescriptorSet> descriptorSets =
       m_descriptorManager.getDescriptorSets();
-  for (size_t i = 0; i < Vulkan::MAX_FRAMES_IN_FLIGHT; i++) {
+  for (size_t i = 0; i < Config::MAX_FRAMES_IN_FLIGHT; i++) {
 
     VkDescriptorBufferInfo viewProjectMatrixUBO{
         .buffer = m_uniformBuffers[i].getBuffer(),
         .offset = 0,
         .range = VK_WHOLE_SIZE};
 
-    VkDescriptorBufferInfo vertexSSBO{.buffer = m_vertexSSBO[i].getBuffer(),
+    VkDescriptorBufferInfo vertexSSBO{.buffer =
+                                          m_transform2dSSBO[i].getBuffer(),
                                       .offset = 0,
                                       .range = VK_WHOLE_SIZE};
 
@@ -95,63 +114,46 @@ void Renderer::bindUniformBuffersToDescriptorSets() const {
   }
 }
 
-void Renderer::updateUniformBuffers(uint32_t currentImage) {
+void Renderer::updateUniformBuffers(const uint32_t currentFrame) const {
   Vulkan::UniformBufferObject ubo{};
   Vulkan::SwapChainInfo swapChainInfo = m_context.getSwapChainInfo();
-  // ubo.view = glm::lookAt(glm::vec3(0.0f, 0.0f, 3.0f), // Camera position
-  // (eye)
-  //                        glm::vec3(0.0f, 0.0f, 0.0f), // Look at (center)
-  //                        glm::vec3(0.0f, 1.0f, 0.0f)  // Up vector (Y up)
-  // );proj
-  // ubo.view =
-  //     glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
-  //                 glm::vec3(0.0f, 0.0f, 1.0f));
+
   ubo.view = glm::mat4(1.0f);
 
   ubo.projection = glm::orthoLH_ZO(
       0.0f, static_cast<float>(swapChainInfo.extent.width), 0.0f,
       static_cast<float>(swapChainInfo.extent.height), 0.0f, 1.0f);
-  // ubo.projection[1][1] *= -1;
-  // std::cout << "debug\n";
-  // std::cout << glm::to_string(ubo.projection) << "\n";
-  // std::cout << glm::to_string(ubo.view) << "\n";
-  // std::cout << glm::to_string(m_renderableMatrix[0]) << "\n";
 
-  m_uniformBuffers[currentImage].copyDataToBuffer(
+  m_uniformBuffers[currentFrame].copyDataToBuffer(
       &ubo, sizeof(Vulkan::UniformBufferObject));
-
-  m_vertexSSBO[currentImage].copyDataToBuffer(&m_renderableMatrix,
-                                              sizeof(glm::mat4) * 10);
 }
 
-void Renderer::drawFrame() {
-  const auto imageIntex = m_context.beginFrame();
+void Renderer::updateTransform2dBuffers(uint32_t currentFrame) {
+  if (m_transform2dChanged[currentFrame]) {
+    VkDeviceSize transform2dBufferSize =
+        sizeof(glm::mat4) * m_renderObjectsCount;
+    VkCommandBuffer commandBuffer =
+        Vulkan::VulkanHelpers::beginSingleTimeCommands(m_context);
+    VkBufferCopy copyRegion{0, 0, transform2dBufferSize};
+    vkCmdCopyBuffer(commandBuffer, m_transform2dStagingBuffer->getBuffer(),
+                    m_transform2dSSBO[currentFrame].getBuffer(), 1,
+                    &copyRegion);
+    Vulkan::VulkanHelpers::endSingleTimeCommands(m_context, commandBuffer);
+    m_transform2dChanged[currentFrame] = false;
+  }
+}
+
+void Renderer::render() {
+  const auto imageIndex = m_context.beginFrame();
   const auto currentFrame = m_context.getCurrentFrame();
-  if (imageIntex < 0) {
+  if (imageIndex < 0) {
     return;
   }
   updateUniformBuffers(currentFrame);
+  updateTransform2dBuffers(currentFrame);
   vkResetCommandBuffer(m_context.getCommandBuffers()[currentFrame], 0);
-  recordCommandBuffer(m_context.getCommandBuffers()[currentFrame], imageIntex);
-  m_context.endFrame(imageIntex);
-}
-
-std::vector<char> Renderer::readFile(const std::string &filename) {
-  std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-  if (!file.is_open()) {
-    throw std::runtime_error("failed to open file!");
-  }
-
-  size_t fileSize = (size_t)file.tellg();
-  std::vector<char> buffer(fileSize);
-
-  file.seekg(0);
-  file.read(buffer.data(), fileSize);
-
-  file.close();
-
-  return buffer;
+  recordCommandBuffer(m_context.getCommandBuffers()[currentFrame], imageIndex);
+  m_context.endFrame(imageIndex);
 }
 
 void Renderer::createGraphicsPipeline() {
@@ -343,7 +345,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer commandBuffer,
       commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, 1,
       &descriptorSets[m_context.getCurrentFrame()], 0, nullptr);
 
-  vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()), 10, 0, 0);
+  vkCmdDraw(commandBuffer, static_cast<uint32_t>(vertices.size()),
+            m_renderObjectsCount, 0, 0);
 
   vkCmdEndRenderPass(commandBuffer);
 
@@ -365,6 +368,24 @@ VkShaderModule Renderer::createShaderModule(std::vector<char> &shaderCode) {
   return shaderModule;
 }
 
+std::vector<char> Renderer::readFile(const std::string &filename) {
+  std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+  if (!file.is_open()) {
+    throw std::runtime_error("failed to open file!");
+  }
+
+  size_t fileSize = (size_t)file.tellg();
+  std::vector<char> buffer(fileSize);
+
+  file.seekg(0);
+  file.read(buffer.data(), fileSize);
+
+  file.close();
+
+  return buffer;
+}
+
 Renderer::~Renderer() {
   m_context.waitForIdle();
   // for (AllocatedBuffer buffer : uniformBuffers) {
@@ -374,30 +395,13 @@ Renderer::~Renderer() {
   vkDestroyPipelineLayout(m_context.getDevice(), m_pipelineLayout, nullptr);
 }
 
-void Renderer::createVertexSSBOs() {
-  for (int i = 0; i < Vulkan::MAX_FRAMES_IN_FLIGHT; i++) {
-    m_vertexSSBO.emplace_back(
-        m_context.getAllocator(), 1024, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        VMA_MEMORY_USAGE_AUTO,
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-            VMA_ALLOCATION_CREATE_MAPPED_BIT);
+void Renderer::write2dTransformsToBuffer(
+    const std::vector<glm::mat4> &transforms) {
+  m_renderObjectsCount = transforms.size();
+  m_transform2dStagingBuffer->copyDataToBuffer(
+      transforms.data(), sizeof(glm::mat4) * transforms.size());
+  for (bool &i : m_transform2dChanged) {
+    i = true;
   }
 }
-
-void Renderer::createRenderables() {
-  for (auto &i : m_renderableMatrix) {
-    glm::mat4 transform = glm::mat4(1.0f);
-    transform = glm::translate(transform,
-                               glm::vec3(random() % 2000, random() % 1000, 0));
-    transform =
-        glm::rotate(transform, glm::radians(0.0f), glm::vec3(0.f, 0.f, 1.f));
-    transform = glm::scale(transform, glm::vec3(100.f, 100.f, 1.f));
-    i = transform;
-  }
-}
-
-// void Renderer::updateRenderables() const {
-//   m_vertexSSBO.copyDataToBuffer(&renderable, sizeof(glm::mat4) * 10);
-// }
-
 } // namespace Aether::Renderer

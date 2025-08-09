@@ -1,24 +1,24 @@
 #pragma once
+#include "config/config.hpp"
 #include "renderer/renderer.hpp"
-#include "renderer/window.hpp"
-
 #include <entt/entity/registry.hpp>
-#include <glm/fwd.hpp>
 
 namespace Aether {
 class RenderSystem {
 public:
   explicit RenderSystem(Renderer::Renderer &renderer) : m_renderer(renderer) {
-    m_renderable2Ds.reserve(1024);
+    m_2dRenderables.reserve(Config::MAX_RENDERABLES);
+    m_2dTransforms.reserve(Config::MAX_RENDERABLES);
   }
 
-  void update(entt::registry &reg);
   void render(entt::registry &reg);
   void enqueueRenderable2D(entt::entity e);
   void dequeueRenderable2D(entt::entity e);
 
 private:
   Renderer::Renderer &m_renderer;
-  std::vector<entt::entity> m_renderable2Ds;
+  std::vector<entt::entity> m_2dRenderables;
+  bool m_2dRenderablesChanged = false;
+  std::vector<glm::mat4> m_2dTransforms;
 };
 } // namespace Aether
